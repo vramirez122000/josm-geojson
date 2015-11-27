@@ -6,10 +6,17 @@ import javax.swing.Icon;
 import org.openstreetmap.josm.data.Bounds;
 import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.data.osm.visitor.BoundingXYVisitor;
+import org.openstreetmap.josm.gui.dialogs.LayerListDialog;
+import org.openstreetmap.josm.gui.dialogs.LayerListPopup;
 import org.openstreetmap.josm.gui.layer.Layer;
 import org.openstreetmap.josm.gui.layer.OsmDataLayer;
 import org.openstreetmap.josm.plugins.geojson.DataSetBuilder.BoundedDataSet;
 import org.openstreetmap.josm.tools.ImageProvider;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Class that displays a map layer containing GeoJSON data.
@@ -22,12 +29,15 @@ public class GeoJsonLayer extends OsmDataLayer
     private final DataSet data;
     private Bounds bounds = null;
 
-    public GeoJsonLayer(final String name, final BoundedDataSet data)
+    public GeoJsonLayer(final String name, final BoundedDataSet data, final File associatedFile)
     {
         super(data.getDataSet(), name, null);
         // super(name);
         this.data = data.getDataSet();
         this.bounds = data.getBounds();
+        setAssociatedFile(associatedFile);
+        setUploadDiscouraged(true);
+
     }
 
     public Bounds getBounds()
@@ -56,7 +66,18 @@ public class GeoJsonLayer extends OsmDataLayer
     @Override
     public Action[] getMenuEntries()
     {
-        return new Action[0];
+        final List<Action> actions = new ArrayList<>();
+        actions.addAll(Arrays.asList(
+                LayerListDialog.getInstance().createActivateLayerAction(this),
+                LayerListDialog.getInstance().createShowHideLayerAction(),
+                LayerListDialog.getInstance().createDeleteLayerAction(),
+                SeparatorLayerAction.INSTANCE,
+                LayerListDialog.getInstance().createDuplicateLayerAction(this),
+                new LayerSaveAsAction(this),
+                SeparatorLayerAction.INSTANCE,
+                new LayerListPopup.InfoAction(this)
+        ));
+        return actions.toArray(new Action[actions.size()]);
     }
 
     @Override

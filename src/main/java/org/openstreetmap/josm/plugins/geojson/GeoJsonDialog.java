@@ -1,17 +1,7 @@
 package org.openstreetmap.josm.plugins.geojson;
 
-import java.awt.BorderLayout;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.util.HashMap;
-import java.util.Map;
-
-import javax.swing.DefaultListModel;
-import javax.swing.JList;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-
 import org.openstreetmap.josm.Main;
+import org.openstreetmap.josm.data.SelectionChangedListener;
 import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
@@ -21,6 +11,19 @@ import org.openstreetmap.josm.data.osm.visitor.BoundingXYVisitor;
 import org.openstreetmap.josm.gui.MapView.LayerChangeListener;
 import org.openstreetmap.josm.gui.dialogs.ToggleDialog;
 import org.openstreetmap.josm.gui.layer.Layer;
+
+import javax.swing.DefaultListModel;
+import javax.swing.JList;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import java.awt.BorderLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Dialog that contains a listing of all the features opened by the GeoJson plugin.
@@ -39,6 +42,11 @@ public class GeoJsonDialog extends ToggleDialog implements LayerChangeListener
         private final OsmPrimitive osmPrimitive;
         private final long index;
 
+        /**
+         *
+         * @param index the index
+         * @param osmPrimitive the primitive
+         */
         public PrintablePrimitive(final long index, final OsmPrimitive osmPrimitive)
         {
             this.osmPrimitive = osmPrimitive;
@@ -86,14 +94,13 @@ public class GeoJsonDialog extends ToggleDialog implements LayerChangeListener
         this.layer = layer;
         this.panel = new JPanel(new BorderLayout());
         this.panel.setName("GeoJson Panel");
-        if (layer != null && layer.getData() != null && layer.getData().allPrimitives() != null
-                && !layer.getData().allPrimitives().isEmpty())
+        if (layer != null && layer.getData() != null && !layer.getData().allPrimitives().isEmpty())
         {
             add(this.panel, BorderLayout.CENTER);
 
-            final DefaultListModel<PrintablePrimitive> model = new DefaultListModel<PrintablePrimitive>();
-            final Map<Integer, PrimitiveId> indexToIdentifier = new HashMap<Integer, PrimitiveId>();
-            final Map<PrimitiveId, Integer> identifierToIndex = new HashMap<PrimitiveId, Integer>();
+            final DefaultListModel<PrintablePrimitive> model = new DefaultListModel<>();
+            final Map<Integer, PrimitiveId> indexToIdentifier = new HashMap<>();
+            final Map<PrimitiveId, Integer> identifierToIndex = new HashMap<>();
             int index = 0;
 
             // Build the maps and add the primitives to the list's model
@@ -127,27 +134,37 @@ public class GeoJsonDialog extends ToggleDialog implements LayerChangeListener
                     zoomTo(layer.getData().getPrimitiveById(identifier));
                 }
             });
-            list.addListSelectionListener(listSelectionEvent -> {
-                if (listClick)
+            list.addListSelectionListener(new ListSelectionListener()
+            {
+                @Override
+                public void valueChanged(final ListSelectionEvent listSelectionEvent)
                 {
-                    final int selectedIndex = listSelectionEvent.getFirstIndex();
-                    final PrimitiveId identifier = indexToIdentifier.get(selectedIndex);
-                    layer.getData().setSelected(identifier);
-                    zoomTo(layer.getData().getPrimitiveById(identifier));
+                    if (listClick)
+                    {
+                        final int selectedIndex = listSelectionEvent.getFirstIndex();
+                        final PrimitiveId identifier = indexToIdentifier.get(selectedIndex);
+                        layer.getData().setSelected(identifier);
+                        GeoJsonDialog.this.zoomTo(layer.getData().getPrimitiveById(identifier));
+                    }
                 }
             });
 
             // The listener for clicks on the map
-            DataSet.addSelectionListener(selection -> {
-                for (final OsmPrimitive feature : selection)
+            DataSet.addSelectionListener(new SelectionChangedListener()
+            {
+                @Override
+                public void selectionChanged(final Collection<? extends OsmPrimitive> selection)
                 {
-                    if (identifierToIndex.containsKey(feature.getPrimitiveId()))
+                    for (final OsmPrimitive feature : selection)
                     {
-                        final int idx = identifierToIndex.get(feature.getPrimitiveId());
-                        listClick = false;
-                        list.setSelectedIndices(new int[] { idx });
-                        list.ensureIndexIsVisible(idx);
-                        break;
+                        if (identifierToIndex.containsKey(feature.getPrimitiveId()))
+                        {
+                            final int idx = identifierToIndex.get(feature.getPrimitiveId());
+                            listClick = false;
+                            list.setSelectedIndices(new int[]{idx});
+                            list.ensureIndexIsVisible(idx);
+                            break;
+                        }
                     }
                 }
             });

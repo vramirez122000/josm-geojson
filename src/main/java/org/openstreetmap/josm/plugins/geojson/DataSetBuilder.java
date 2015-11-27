@@ -1,23 +1,14 @@
 package org.openstreetmap.josm.plugins.geojson;
 
+import org.geojson.*;
+import org.openstreetmap.josm.data.Bounds;
+import org.openstreetmap.josm.data.coor.LatLon;
+import org.openstreetmap.josm.data.osm.*;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.TreeMap;
-
-import org.geojson.Feature;
-import org.geojson.FeatureCollection;
-import org.geojson.GeoJsonObject;
-import org.geojson.LineString;
-import org.geojson.LngLatAlt;
-import org.geojson.Point;
-import org.geojson.Polygon;
-import org.openstreetmap.josm.data.Bounds;
-import org.openstreetmap.josm.data.coor.LatLon;
-import org.openstreetmap.josm.data.osm.DataSet;
-import org.openstreetmap.josm.data.osm.Node;
-import org.openstreetmap.josm.data.osm.Way;
 
 /**
  * @author matthieun
@@ -32,6 +23,11 @@ public class DataSetBuilder
         private final DataSet dataSet;
         private final Bounds bounds;
 
+        /**
+         *
+         * @param dataSet
+         * @param bounds
+         */
         public BoundedDataSet(final DataSet dataSet, final Bounds bounds)
         {
             this.dataSet = dataSet;
@@ -49,109 +45,128 @@ public class DataSetBuilder
         }
     }
 
-    public BoundedDataSet build(final GeoJsonObject data)
+    /**
+     *
+     * @param geoJson geoJson Object
+     * @return
+     */
+    public BoundedDataSet build(final GeoJsonObject geoJson)
     {
-        DataSet dataSet = null;
-        Bounds bounds = null;
-        dataSet = new DataSet();
-        if (data instanceof FeatureCollection)
-        {
-            final FeatureCollection fc = (FeatureCollection) data;
-            for (final Feature feature : fc)
-            {
-                final GeoJsonObject geometry = feature.getGeometry();
-                if (geometry instanceof Point)
-                {
-                    final LngLatAlt coordinate = ((Point) geometry).getCoordinates();
-                    final LatLon latlon = new LatLon(coordinate.getLatitude(),
-                            coordinate.getLongitude());
-                    final Node node = new Node(latlon);
-                    node.setKeys(getTags(feature));
-                    dataSet.addPrimitive(node);
-                }
-                if (geometry instanceof LineString)
-                {
-                    final Way way = new Way();
 
-                    final List<LngLatAlt> coordinates = ((LineString) geometry).getCoordinates();
-                    final List<Node> nodes = new ArrayList<Node>(coordinates.size());
-                    for (final LngLatAlt lngLatAlt : coordinates)
-                    {
-                        final LatLon latlon = new LatLon(lngLatAlt.getLatitude(),
-                                lngLatAlt.getLongitude());
-
-                        if (bounds == null)
-                        {
-                            bounds = new Bounds(latlon);
-                        }
-                        else
-                        {
-                            bounds.extend(latlon);
-                        }
-
-                        final Node node = new Node(latlon);
-                        dataSet.addPrimitive(node);
-                        nodes.add(node);
-                    }
-                    way.setNodes(nodes);
-                    way.setKeys(getTags(feature));
-                    dataSet.addPrimitive(way);
-                }
-                else if (geometry instanceof Polygon)
-                {
-                    final Way way = new Way();
-
-                    final List<List<LngLatAlt>> coordinates = ((Polygon) geometry).getCoordinates();
-                    final List<Node> nodes = new ArrayList<Node>(coordinates.size());
-                    int counter = 0;
-                    Node first = null;
-                    for (final List<LngLatAlt> coordinateList : coordinates)
-                    {
-                        for (final LngLatAlt lngLatAlt : coordinateList)
-                        {
-                            final LatLon latlon = new LatLon(lngLatAlt.getLatitude(),
-                                    lngLatAlt.getLongitude());
-
-                            if (bounds == null)
-                            {
-                                bounds = new Bounds(latlon);
-                            }
-                            else
-                            {
-                                bounds.extend(latlon);
-                            }
-
-                            final Node node = new Node(latlon);
-                            dataSet.addPrimitive(node);
-                            nodes.add(node);
-                            if (counter == 0)
-                            {
-                                first = node;
-                            }
-                            counter++;
-                        }
-                    }
-                    if (first != null)
-                    {
-                        nodes.add(first);
-                    }
-                    way.setNodes(nodes);
-                    way.setKeys(getTags(feature));
-                    dataSet.addPrimitive(way);
-                }
-            }
+        final MutableBoundedDataSet data = new MutableBoundedDataSet();
+        if (!(geoJson instanceof FeatureCollection)) {
+            throw new UnsupportedOperationException("Only FeatureCollection is supported at the moment!");
         }
-        return new BoundedDataSet(dataSet, bounds);
+
+        final FeatureCollection fc = (FeatureCollection) geoJson;
+        for (Feature feature : fc) {
+
+            final GeoJsonObject geometry = feature.getGeometry();
+            if(geometry instanceof Point) {
+                Node n = convertLngLatAlt(((Point) geometry).getCoordinates(), data);
+                n.setKeys(getTags(feature.getProperties()));
+                data.dataSet.addPrimitive(n);
+                continue;
+            }
+
+            if(geometry instanceof MultiPoint) {
+
+                if (geometry instanceof LineString) {
+                    Way w = convertCoordinatesToWay(((MultiPoint) geometry).getCoordinates(), data);
+                    w.setKeys(getTags(feature.getProperties()));
+                    data.dataSet.addPrimitive(w);
+                    continue;
+                }
+
+                for (LngLatAlt lngLatAlt : ((MultiPoint) geometry).getCoordinates()) {
+                    Node n = convertLngLatAlt(lngLatAlt, data);
+                    n.setKeys(getTags(feature.getProperties()));
+                    data.dataSet.addPrimitive(n);
+                    continue;
+                }
+
+
+            }
+
+            if (geometry instanceof Polygon) {
+
+                final List<List<LngLatAlt>> rings = ((Polygon) geometry).getCoordinates();
+                if(rings.size() == 1) {
+                    Way w = convertCoordinatesToWay(rings.get(0), data);
+                    w.setKeys(getTags(feature.getProperties()));
+                    data.dataSet.addPrimitive(w);
+                    continue;
+                }
+
+                Relation r = new Relation();
+
+                for (int i = 0; i < rings.size(); i++) {
+                    final List<LngLatAlt> ring = rings.get(i);
+
+                    Way w = convertCoordinatesToWay(ring, data);
+                    data.dataSet.addPrimitive(w);
+                    if(i == 0) {
+                        r.addMember(new RelationMember("outer", w));
+                    } else {
+                        r.addMember(new RelationMember("inner", w));
+                    }
+                }
+
+                final Map<String, String> tags = getTags(feature.getProperties());
+                tags.put("type", "multipolygon");
+                r.setKeys(tags);
+                data.dataSet.addPrimitive(r);
+                continue;
+
+
+
+            }
+
+            throw new IllegalArgumentException(" Only Point, Polygon, Linestring and MultiPoint are supported");
+
+        }
+
+        return new BoundedDataSet(data.dataSet, data.bounds);
     }
 
-    private Map<String, String> getTags(final Feature feature)
+    private Way convertCoordinatesToWay(final List<LngLatAlt> coordinates, final MutableBoundedDataSet d)
     {
-        final Map<String, Object> properties = feature.getProperties();
-        final Map<String, String> tags = new TreeMap<String, String>();
-        for (final Entry<String, Object> entry : properties.entrySet())
-        {
+        Way w = new Way();
+        final List<Node> nodes = new ArrayList<>(coordinates.size());
+        for (LngLatAlt lngLatAlt : coordinates) {
+            Node n = convertLngLatAlt(lngLatAlt, d);
+            d.dataSet.addPrimitive(n);
+            nodes.add(n);
+        }
+        w.setNodes(nodes);
+        return w;
+    }
+
+    private Node convertLngLatAlt(final LngLatAlt lngLatAlt, final MutableBoundedDataSet d)
+    {
+        final LatLon latlon = new LatLon(lngLatAlt.getLatitude(), lngLatAlt.getLongitude());
+
+        if (d.bounds == null) {
+            d.bounds = new Bounds(latlon);
+        } else {
+            d.bounds.extend(latlon);
+        }
+
+        return new Node(latlon);
+
+    }
+
+    private Map<String, String> getTags(final Map<String, Object> properties)
+    {
+        final Map<String, String> tags = new TreeMap<>();
+        for (Map.Entry<String, Object> entry : properties.entrySet()) {
             tags.put(entry.getKey(), entry.getValue().toString());
         }
         return tags;
+    }
+
+    private class MutableBoundedDataSet {
+        DataSet dataSet = new DataSet();
+        Bounds bounds;
     }
 }

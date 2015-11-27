@@ -18,8 +18,8 @@ project.ext.josm_version='9060'
 project.ext.josm_location='download'
 //project.ext.josm_location='download/Archiv'
 
-sourceCompatibility=1.8
-targetCompatibility=1.8
+sourceCompatibility=1.7
+targetCompatibility=1.7
 
 repositories
 { mavenCentral() }
@@ -27,7 +27,7 @@ repositories
 dependencies
 {
     // Josm is not on Maven Central
-    compile files("lib/josm-snapshot-" + josm_version +".jar")
+    compile files("lib/josm-snapshot-${josm_version}.jar")
     compile packages.geojsonjackson
     compile packages.jackson.core
     compile packages.jackson.databind

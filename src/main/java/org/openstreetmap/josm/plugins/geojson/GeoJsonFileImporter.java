@@ -1,10 +1,6 @@
 package org.openstreetmap.josm.plugins.geojson;
 
-import static org.openstreetmap.josm.tools.I18n.tr;
-
-import java.io.File;
-import java.io.IOException;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.geojson.GeoJsonObject;
 import org.openstreetmap.josm.Main;
 import org.openstreetmap.josm.actions.ExtensionFileFilter;
@@ -15,9 +11,10 @@ import org.openstreetmap.josm.gui.util.GuiHelper;
 import org.openstreetmap.josm.io.FileImporter;
 import org.openstreetmap.josm.plugins.geojson.DataSetBuilder.BoundedDataSet;
 
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.File;
+import java.io.IOException;
+
+import static org.openstreetmap.josm.tools.I18n.tr;
 
 /**
  * @author Ian Dees <ian.dees@gmail.com>
@@ -25,13 +22,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 public class GeoJsonFileImporter extends FileImporter
 {
+    public static final ExtensionFileFilter FILE_FILTER = new ExtensionFileFilter("geojson,json", "geojson", tr("GeoJSON file") + " (*.geojson,*.json)");
+
     private GeoJsonLayer layer = null;
 
-    public GeoJsonFileImporter()
-    {
-        super(new ExtensionFileFilter("geojson,json", "geojson",
-                tr("GeoJSON file") + " (*.geojson,*.json)"));
+    public GeoJsonFileImporter() {
+        super(FILE_FILTER);
     }
+
 
     public GeoJsonLayer getLayer()
     {
@@ -41,38 +39,25 @@ public class GeoJsonFileImporter extends FileImporter
     @Override
     public void importData(final File file, final ProgressMonitor progressMonitor)
     {
-        GeoJsonObject object = null;
-
+        GeoJsonObject object;
         System.out.println("Parsing GeoJSON: " + file.getAbsolutePath());
         try
         {
             object = new ObjectMapper().readValue(file, GeoJsonObject.class);
             System.out.println("Found: " + object.getClass());
-        }
-        catch (final JsonParseException e)
+        } catch (final IOException e)
         {
-            e.printStackTrace();
-        }
-        catch (final JsonMappingException e)
-        {
-            e.printStackTrace();
-        }
-        catch (final IOException e)
-        {
-            e.printStackTrace();
-        }
-        catch (final Exception e)
-        {
-            e.printStackTrace();
+            throw new IllegalArgumentException("Could not parse JSON", e);
         }
         final BoundedDataSet data = new DataSetBuilder().build(object);
-        this.layer = new GeoJsonLayer("GeoJSON: " + file.getName(), data);
+        this.layer = new GeoJsonLayer("GeoJSON: " + file.getName(), data, file);
 
-        GuiHelper.runInEDT(() -> {
-            Main.main.addLayer(this.layer);
-            System.out.println("Added layer.");
-            Main.main.addLayer(new OsmDataLayer(new DataSet(), "OSM Data Layer", null));
-
+        GuiHelper.runInEDT(new Runnable() {
+            @Override
+            public void run() {
+                Main.main.addLayer(GeoJsonFileImporter.this.layer);
+                System.out.println("Added layer.");
+            }
         });
     }
 }
