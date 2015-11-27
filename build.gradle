@@ -14,9 +14,12 @@ group = 'org.openstreetmap.josm.plugins'
 version = '0.0.0-SNAPSHOT'
 
 // Change JOSM version (if needed) before you build
-project.ext.josm_version='8599'
+project.ext.josm_version='9060'
 project.ext.josm_location='download'
 //project.ext.josm_location='download/Archiv'
+
+sourceCompatibility=1.8
+targetCompatibility=1.8
 
 repositories
 { mavenCentral() }
@@ -36,7 +39,10 @@ dependencies
 jar
 {
     from{
-        configurations.compile.collect
+        configurations.compile.findAll
+        {
+            it.name != "josm-snapshot-${josm_version}.jar"
+        }.collect
         {
             it.isDirectory() ? it : zipTree(it).matching{
                 exclude
@@ -48,7 +54,7 @@ jar
     }
     manifest
     {
-        attributes("Author": "Ian Dees and matthieun",
+        attributes("Author": "Ian Dees and matthieun and Victor Ramirez",
         "Plugin-Class": "org.openstreetmap.josm.plugins.geojson.GeoJsonPlugin",
         "Plugin-Date": "2015-06-07T23:12:29.582966Z",
         "Plugin-Description": "Allows you to view a GeoJSON file as a layer.",
@@ -64,6 +70,29 @@ jar
 import de.undercouch.gradle.tasks.download.Download
 
 task josm(type: Download) {
-    src 'http://josm.openstreetmap.de/' + josm_location + '/josm-snapshot-' + josm_version + '.jar'
-    dest 'lib/'
+    def folder = new File( 'lib' )
+    if( !folder.exists() ) {
+        folder.mkdirs()
+    }
+    src "http://josm.openstreetmap.de/${josm_location}/josm-snapshot-${josm_version}.jar"
+    dest folder
+}
+
+import org.gradle.internal.os.OperatingSystem
+
+task installPlugin(type: Copy, dependsOn: jar) {
+    def destStr
+    if(OperatingSystem.current().isMacOsX()) {
+        destStr = "${System.getProperty('user.home')}/Library/JOSM/plugins"
+    } else if(OperatingSystem.current().isWindows()) {
+        destStr = "${System.getenv()['APPDATA']}/JOSM/plugins"
+    } else {
+        destStr = "${System.getProperty('user.home')}/.josm/plugins"
+    }
+    println(jar.archivePath)
+    from jar.archivePath
+    into destStr
+    rename {
+        'geojson.jar'
+    }
 }

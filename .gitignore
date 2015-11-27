@@ -8,3 +8,6 @@ build
 .gradle
 /bin/
 /lib/
+
+*.iml
+.idea/

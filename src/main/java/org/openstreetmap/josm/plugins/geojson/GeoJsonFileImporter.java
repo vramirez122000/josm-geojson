@@ -11,6 +11,7 @@ import org.openstreetmap.josm.actions.ExtensionFileFilter;
 import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.gui.layer.OsmDataLayer;
 import org.openstreetmap.josm.gui.progress.ProgressMonitor;
+import org.openstreetmap.josm.gui.util.GuiHelper;
 import org.openstreetmap.josm.io.FileImporter;
 import org.openstreetmap.josm.plugins.geojson.DataSetBuilder.BoundedDataSet;
 
@@ -66,8 +67,12 @@ public class GeoJsonFileImporter extends FileImporter
         }
         final BoundedDataSet data = new DataSetBuilder().build(object);
         this.layer = new GeoJsonLayer("GeoJSON: " + file.getName(), data);
-        Main.main.addLayer(this.layer);
-        System.out.println("Added layer.");
-        Main.main.addLayer(new OsmDataLayer(new DataSet(), "OSM Data Layer", null));
+
+        GuiHelper.runInEDT(() -> {
+            Main.main.addLayer(this.layer);
+            System.out.println("Added layer.");
+            Main.main.addLayer(new OsmDataLayer(new DataSet(), "OSM Data Layer", null));
+
+        });
     }
 }
